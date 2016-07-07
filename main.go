@@ -49,7 +49,7 @@ func main() {
 		return
 	}
 	fmt.Println("Adding CSS File")
-	cssWrite, cssErr := writer.Add("text/style.css", epub.ContentTypeAuxiliary)
+	cssWrite, cssErr := writer.Add("text/style.css", epub.ContentTypeMedia)
 	if cssErr != nil {
 		fmt.Println(cssErr)
 		return
@@ -68,7 +68,7 @@ func main() {
 			}
 			memeImage := map[string]string{"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif"}
 			imgName = fmt.Sprintf("images/cover.%s", memeImage[dataURL.Type])
-			coverWrite, cverr := writer.Add(imgName, epub.ContentTypeMedia)
+			coverWrite, cverr := writer.Add(imgName, epub.ContentTypeMedia, "cover-image")
 			if cverr != nil {
 				fmt.Println(cverr)
 				return
@@ -89,7 +89,7 @@ func main() {
 			defer resp.Body.Close()
 			//Use the URL's extension for the file. May or may not work..?
 			imgName = fmt.Sprintf("images/cover.%s", imgURL.Path[strings.LastIndex(imgURL.Path, ".")+1:])
-			coverWrite, cverr := writer.Add(imgName, epub.ContentTypeMedia)
+			coverWrite, cverr := writer.Add(imgName, epub.ContentTypeMedia, "cover-image")
 			if cverr != nil {
 				fmt.Println(cverr)
 				return
@@ -117,6 +117,7 @@ func main() {
 
 	}
 
+	var Chapters []map[string]string
 	fmt.Println("Downloading chapters.")
 	tmpl, _ := template.New("chap").Parse(MainTemplate)
 
@@ -137,7 +138,7 @@ func main() {
 			fmt.Println("Page did not load properly. \nTrying again...")
 			goto TryAgain
 		}
-		chapContent, _ := chap.Find("#posts .post_body").Html()
+		chapContent, _ := chap.Find("#posts .post_body").Html() //The contents of our chapter.
 
 		//Create our file.
 		chapWrite, chErr := writer.Add(fmt.Sprintf("text/Section-%03d.xhtml", i), epub.ContentTypePrimary)
@@ -149,8 +150,48 @@ func main() {
 		var b bytes.Buffer
 		tmpl.Execute(&b, outs)
 
-		chapWrite.Write(b.Bytes())
+		//Now that we have created our Document, we need to sanitize it.
+		//RRL still uses some legacy parameters, and also throws in things like the nav bar and donation button.
+		chapt, err := goquery.NewDocumentFromReader(bytes.NewReader(b.Bytes()))
+		if err != nil {
+			fmt.Println(err, "\nChapter skipped...")
+			return
+		}
+		//Remove the "beta fiction reader".
+		chapt.Find("a[href^=\"/fiction/Chapter\"][class=\"button\"]").Parent().Remove()
+		//Remove the Navigation bar at the bottom.
+		chapt.Find("div div[class=\"post-content\"] table[class=\"tablebg\"][width=\"85%\"]").Parent().Parent().Remove()
+		//Remove the donation button.
+		chapt.Find("div[class=\"thead\"]").Remove()
+		//Remove the table "bgcolor" attribute, which has been depricated for ages.
+		chapt.Find("table[bgcolor]").RemoveAttr("bgcolor")
+		//Remove <style> tags inside of the body.
+		chapt.Find("body style").Remove()
+		//Remove "border" attribute from images (because MyBB...)
+		chapt.Find("img[border]").RemoveAttr("border")
+
+		//Nothing can be done about Author Notes, because every author structures them differently.
+		st, err := goquery.OuterHtml(chapt.First())
+		if err != nil {
+			fmt.Println(err, "\nChapter skipped...")
+			return
+		}
+
+		chapWrite.Write([]byte(st))
+		Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("../text/Section-%03d.xhtml", i), "Title": chapTitle})
 	})
+	fmt.Println("Generating Table of Contents.")
+	Ntmpl, _ := template.New("nav").Parse(NavTemp)
+	var b bytes.Buffer
+	Ntmpl.Execute(&b, Chapters)
+
+	navWrite, err := writer.Add(fmt.Sprint("text/nav.xhtml"), epub.ContentTypeAuxiliary, "nav")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	navWrite.Write(b.Bytes())
+
 	writer.Metadata = epub.CreateMetadata(map[string]string{"title": ficTitle, "author": ficAuthor})
 	writer.Close()
 }
@@ -227,7 +268,7 @@ table thead th{
 	margin: 3px;
 	padding: 5px;
 	color: #ccc;
-	border: 1px solid rgba(255,255,255, .25) !important;
+	border: 1px solid rgba(255,255,255, .25);
 	background: rgba(0, 0, 0, .1);
 }
 
@@ -254,9 +295,64 @@ table tr td, table tr th, table thead th {
 	margin: 3px;
 	padding: 5px;
 	background: rgba(0, 0, 0, 0.0980392);
-	border-width: 1px !important;
-	border-style: solid !important;
-	border-color: rgba(255, 255, 255, 0.247059) !important;
-	border-image:  !important;
+	border-width: 1px;
+	border-style: solid;
+	border-color: rgba(255, 255, 255, 0.247059);
+}
+
+.spoiler_header {
+	background: #FFF;
+	border: 1px solid #CCC;
+	padding: 4px;
+	margin: 4px 0 0 0;
+	color: #000;
+}
+.spoiler_body {
+	background: inherit;
+	padding: 4px;
+	border: 1px solid #CCC;
+	border-top: 0;
+	color: inherit;
+	margin: 0 0 4px 0;
 }
 `)
+
+var NavTemp = string(`<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <style type="text/css">
+    nav#landmarks, nav#page-list { display:none; }
+    ol { list-style-type: none; }
+  </style>
+  <title>Table of Contents</title>
+</head>
+
+<body epub:type="frontmatter">
+  <nav epub:type="toc" id="toc">
+    <h1>Table of Contents</h1>
+    <ol>
+	  {{range .}}
+      <li>
+        <a href="{{.Path}}">{{.Title}}</a>
+      </li>
+	  {{end}}
+    </ol>
+  </nav>
+  <nav epub:type="landmarks" id="landmarks" hidden="">
+    <h1>Landmarks</h1>
+    <ol>
+      <li>
+        <a epub:type="toc" href="#toc">Table of Contents</a>
+      </li>
+	  {{range .}}
+      <li>
+        <a epub:type="chapter" href="{{.Path}}">Chapter</a>
+      </li>
+	  {{end}}
+    </ol>
+  </nav>
+</body>
+</html>`)
