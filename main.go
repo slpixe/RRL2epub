@@ -178,7 +178,7 @@ func main() {
 		}
 
 		chapWrite.Write([]byte(st))
-		Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("../text/Section-%03d.xhtml", i), "Title": chapTitle})
+		Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("text/Section-%03d.xhtml", i), "Title": chapTitle})
 	})
 	fmt.Println("Generating Table of Contents.")
 	Ntmpl, _ := template.New("nav").Parse(NavTemp)
@@ -191,6 +191,17 @@ func main() {
 		return
 	}
 	navWrite.Write(b.Bytes())
+
+	Ttmpl, _ := template.New("toc").Parse(TocTemp)
+	var bt bytes.Buffer
+	Ttmpl.Execute(&bt, map[string]interface{}{"Title": ficTitle, "Chapters": Chapters})
+
+	tocWrite, err := writer.Add(fmt.Sprint("toc.ncx"), epub.ContentTypeMedia)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	tocWrite.Write(bt.Bytes())
 
 	writer.Metadata = epub.CreateMetadata(map[string]string{"title": ficTitle, "author": ficAuthor})
 	writer.Close()
@@ -336,7 +347,7 @@ var NavTemp = string(`<?xml version="1.0" encoding="utf-8"?>
     <ol>
 	  {{range .}}
       <li>
-        <a href="{{.Path}}">{{.Title}}</a>
+        <a href="../{{.Path}}">{{.Title}}</a>
       </li>
 	  {{end}}
     </ol>
@@ -349,10 +360,31 @@ var NavTemp = string(`<?xml version="1.0" encoding="utf-8"?>
       </li>
 	  {{range .}}
       <li>
-        <a epub:type="chapter" href="{{.Path}}">Chapter</a>
+        <a epub:type="chapter" href="../{{.Path}}">Chapter</a>
       </li>
 	  {{end}}
     </ol>
   </nav>
 </body>
 </html>`)
+var TocTemp = string(`<?xml version="1.0" encoding="utf-8" ?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+<head>
+<meta content="1" name="dtb:depth"/>
+<meta content="0" name="dtb:totalPageCount"/>
+<meta content="0" name="dtb:maxPageNumber"/>
+</head>
+<docTitle>
+<text>{{.Title}}</text>
+</docTitle>
+<navMap>
+{{range .Chapters}}
+<navPoint>
+<navLabel>
+<text>{{.Title}}</text>
+</navLabel>
+<content src="{{.Path}}"/>
+</navPoint>
+{{end}}
+</navMap>
+</ncx>`)
