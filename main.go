@@ -163,6 +163,9 @@ func main() {
 		chapt.Find("div div[class=\"post-content\"] table[class=\"tablebg\"][width=\"85%\"]").Parent().Parent().Remove()
 		//Remove the donation button.
 		chapt.Find("div[class=\"thead\"]").Remove()
+		//Remove the ad at the top of the chapter.
+		chapt.Find("div[class=\"smalltext\"]").Remove()
+		chapt.Find("div[class^=\"div-gpt-ad\"]").Remove()
 		//Remove the table "bgcolor" attribute, which has been depricated for ages.
 		chapt.Find("table[bgcolor]").RemoveAttr("bgcolor")
 		//Remove <style> tags inside of the body.
