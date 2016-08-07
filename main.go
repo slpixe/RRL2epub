@@ -164,7 +164,9 @@ func main() {
 		//Remove the donation button.
 		chapt.Find("div[class=\"thead\"]").Remove()
 		//Remove the ad at the top of the chapter.
+		
 		chapt.Find("div[class=\"smalltext\"]").Remove()
+		chapt.Find("div[id^=\"div-gpt-ad\"] + hr").Remove() //Horizontal line following the ad
 		chapt.Find("div[id^=\"div-gpt-ad\"]").Remove()
 		//Remove the table "bgcolor" attribute, which has been depricated for ages.
 		chapt.Find("table[bgcolor]").RemoveAttr("bgcolor")
