@@ -165,7 +165,7 @@ func main() {
 		chapt.Find("div[class=\"thead\"]").Remove()
 		//Remove the ad at the top of the chapter.
 		chapt.Find("div[class=\"smalltext\"]").Remove()
-		chapt.Find("div[class^=\"div-gpt-ad\"]").Remove()
+		chapt.Find("div[id^=\"div-gpt-ad\"]").Remove()
 		//Remove the table "bgcolor" attribute, which has been depricated for ages.
 		chapt.Find("table[bgcolor]").RemoveAttr("bgcolor")
 		//Remove <style> tags inside of the body.
