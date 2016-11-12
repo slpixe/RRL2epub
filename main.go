@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -30,16 +31,17 @@ func main() {
 		return
 	}
 	//Check for title. If title can't be found, we have a problem.
-	ficTitle := doc.Find("#fiction .fiction-title").Text()
+	ficTitle := doc.Find("div.fic-header > .fic-title > h2[property='name']").Text()
 	if ficTitle == "" {
 		log.Fatal("Error communicating with RRL, or with the given Fiction ID")
 		return
 	}
-	ficImage, _ := doc.Find("#fiction #fiction-header img").Attr("src")
-	ficAuthor := doc.Find("#fiction .author").Text()[3:]
+	ficImage, _ := doc.Find("div.fic-header img[property='image']").Attr("src")
+	ficAuthor := doc.Find("div.fic-header > .fic-title > h4 > span[property='name']").Text()[3:]
 
 	workingDir, _ := os.Getwd()
-	filename := fmt.Sprintf("%s/%s.epub", workingDir, ficTitle)
+	r := strings.NewReplacer(" ", "_", ", ", "_", ": ", "_")
+	filename := fmt.Sprintf("%s/%s.epub", workingDir, r.Replace(ficTitle))
 	os.Create(filename)
 	fmt.Println("Creating EPUB:", filename)
 	//Create Epub file, and name it after the story.
@@ -122,23 +124,23 @@ func main() {
 	tmpl, _ := template.New("chap").Parse(MainTemplate)
 
 	//Iterate through chapters.
-	doc.Find(".chapters ul a").Each(func(i int, s *goquery.Selection) {
-		chapTitle, _ := s.Attr("title")
+	doc.Find("#chapters tr>td a[href ^= '/fiction/chapter/']").Each(func(i int, s *goquery.Selection) {
+		chapTitle := strings.TrimSpace(s.Text())
 		fmt.Println("Adding:", chapTitle)
 	TryAgain:
 		chURL, _ := s.Attr("href")
+		chURL = "https://royalroadl.com/" + chURL
 		chap, err := goquery.NewDocument(chURL)
 		if err != nil {
 			fmt.Println(err, "\nTrying again...")
 			goto TryAgain
 		}
 		//Make sure the title is there, to verify the thread loaded properly.
-		chapTitle2 := chap.Find(".ccgtheadposttitle").Text()
-		if chapTitle2 == "" { //Verify the page loaded properly.
+		if chap.Find(".fic-header .md-text-left h2").Text() == "" { //Verify the page loaded properly.
 			fmt.Println("Page did not load properly. \nTrying again...")
 			goto TryAgain
 		}
-		chapContent, _ := chap.Find("#posts .post_body").Html() //The contents of our chapter.
+		chapContent, _ := chap.Find(".portlet-body .chapter-content").Html() //The contents of our chapter.
 
 		//Create our file.
 		chapWrite, chErr := writer.Add(fmt.Sprintf("text/Section-%03d.xhtml", i), epub.ContentTypePrimary)
@@ -157,21 +159,9 @@ func main() {
 			fmt.Println(err, "\nChapter skipped...")
 			return
 		}
-		//Remove the "beta fiction reader".
-		chapt.Find("a[href^=\"/fiction/Chapter\"][class=\"button\"]").Parent().Remove()
-		//Remove the Navigation bar at the bottom.
-		chapt.Find("div div[class=\"post-content\"] table[class=\"tablebg\"][width=\"85%\"]").Parent().Parent().Remove()
-		//Remove the donation button.
-		chapt.Find("div[class=\"thead\"]").Remove()
-		//Remove the ad at the top of the chapter.
-		
-		chapt.Find("div[class=\"smalltext\"]").Remove()
-		chapt.Find("div[id^=\"div-gpt-ad\"] + hr").Remove() //Horizontal line following the ad
-		chapt.Find("div[id^=\"div-gpt-ad\"]").Remove()
+
 		//Remove the table "bgcolor" attribute, which has been depricated for ages.
 		chapt.Find("table[bgcolor]").RemoveAttr("bgcolor")
-		//Remove <style> tags inside of the body.
-		chapt.Find("body style").Remove()
 		//Remove "border" attribute from images (because MyBB...)
 		chapt.Find("img[border]").RemoveAttr("border")
 
@@ -181,6 +171,9 @@ func main() {
 			fmt.Println(err, "\nChapter skipped...")
 			return
 		}
+
+		re := regexp.MustCompile("\\s*\\*Edited as of \\w+ \\d+, \\d+\\*") //Remove *Edited as of Month 00, 0000* message.
+		st = re.ReplaceAllString(st, "")
 
 		chapWrite.Write([]byte(st))
 		Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("text/Section-%03d.xhtml", i), "Title": chapTitle})
@@ -255,21 +248,6 @@ a:active {
     text-decoration: none
 }
 img { max-width: 100%; }
-.spoiler_header {
-	background: #FFF;
-	border: 1px solid #CCC;
-	padding: 4px;
-	margin: 4px 0 0 0;
-	color: #000;
-}
-.spoiler_body {
-	background: inherit;
-	padding: 4px;
-	border: 1px solid #CCC;
-	border-top: 0;
-	color: inherit;
-	margin: 0 0 4px 0;
-}
 table{
 	background: #004b7a;
 	margin: 10px auto;
@@ -315,7 +293,7 @@ table tr td, table tr th, table thead th {
 	border-style: solid;
 	border-color: rgba(255, 255, 255, 0.247059);
 }
-
+/*
 .spoiler_header {
 	background: #FFF;
 	border: 1px solid #CCC;
@@ -331,6 +309,7 @@ table tr td, table tr th, table thead th {
 	color: inherit;
 	margin: 0 0 4px 0;
 }
+*/
 `)
 
 var NavTemp = string(`<?xml version="1.0" encoding="utf-8"?>
