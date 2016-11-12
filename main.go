@@ -40,8 +40,8 @@ func main() {
 	ficAuthor := doc.Find("div.fic-header > .fic-title > h4 > span[property='name']").Text()[3:]
 
 	workingDir, _ := os.Getwd()
-	r := strings.NewReplacer(" ", "_", ", ", "_", ": ", "_")
-	filename := fmt.Sprintf("%s/%s.epub", workingDir, r.Replace(ficTitle))
+	re := regexp.MustCompile("([[:space:]]|[[:cntrl:]]|[\\\\/:*?\"<>|])+")
+	filename := fmt.Sprintf("%s/%s.epub", workingDir, re.ReplaceAllString(ficTitle, "_"))
 	os.Create(filename)
 	fmt.Println("Creating EPUB:", filename)
 	//Create Epub file, and name it after the story.
@@ -172,7 +172,7 @@ func main() {
 			return
 		}
 
-		re := regexp.MustCompile("\\s*\\*Edited as of \\w+ \\d+, \\d+\\*") //Remove *Edited as of Month 00, 0000* message.
+		re = regexp.MustCompile("\\s*\\*Edited as of \\w+ \\d+, \\d+\\*") //Remove *Edited as of Month 00, 0000* message.
 		st = re.ReplaceAllString(st, "")
 
 		chapWrite.Write([]byte(st))
