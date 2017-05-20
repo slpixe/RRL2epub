@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,227 +11,205 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/mdigger/epub3"
 	"github.com/vincent-petithory/dataurl"
 )
 
 func main() {
-	ficID := os.Args[1]
-	if ficID == "" {
-		fmt.Println("Define a Fiction ID")
-		return
-	}
-
-	// Scrape Fiction page.
-	doc, err := goquery.NewDocument(fmt.Sprintf("https://royalroadl.com/fiction/%s", ficID))
+	dest, err := url.Parse(join(os.Args[1:], " "))
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Error parsing URL:", err)
+		fmt.Println("Argument must be a valid absolute URL.")
 		return
 	}
-	//Check for title. If title can't be found, we have a problem.
-	ficTitle := doc.Find("div.fic-header > .fic-title > h2[property='name']").Text()
-	if ficTitle == "" {
-		log.Fatal("Error communicating with RRL, or with the given Fiction ID")
+	switch dest.Scheme {
+	case "":
+		fmt.Println("Argument must be a valid absolute URL.")
+		return
+	case "http", "https":
+		switch dest.Hostname() {
+		case "royalroadl.com":
+			royalRoadL(dest)
+			return
+		case "webnovel.com", "www.webnovel.com":
+			qidian(dest)
+			return
+		default:
+			fmt.Println("This host is not supported.")
+			return
+		}
+	case "rrl":
+		newdest, _ := url.Parse(fmt.Sprintf("https://royalroadl.com/fiction/%s", dest.Opaque))
+		royalRoadL(newdest)
+		return
+	case "wn":
+		newdest, _ := url.Parse(fmt.Sprintf("https://www.webnovel.com/book/%s", dest.Opaque))
+		qidian(newdest)
+	default:
+		fmt.Println("This scheme is not supported. Use either http, https, rrl, or wn.")
 		return
 	}
-	ficImage, _ := doc.Find("div.fic-header img[property='image']").Attr("src")
-	ficAuthor := doc.Find("div.fic-header > .fic-title > h4 > span[property='name']").Text()[3:]
+}
 
-	workingDir, _ := os.Getwd()
-	re := regexp.MustCompile("([[:space:]]|[[:cntrl:]]|[\\\\/:*?\"<>|])+")
-	filename := fmt.Sprintf("%s/%s.epub", workingDir, re.ReplaceAllString(ficTitle, "_"))
-	os.Create(filename)
-	fmt.Println("Creating EPUB:", filename)
-	//Create Epub file, and name it after the story.
-	writer, err := epub.Create(filename)
+func genTOC(pub *epub.Writer, Chapters []map[string]string, title string) {
+	Navtmpl, _ := template.New("nav").Parse(NavTemp)
+	var buf bytes.Buffer
+	Navtmpl.Execute(&buf, Chapters)
+
+	navWrite, err := pub.Add(fmt.Sprint("text/nav.xhtml"), epub.ContentTypeAuxiliary, "nav")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Adding CSS File")
-	cssWrite, cssErr := writer.Add("text/style.css", epub.ContentTypeMedia)
-	if cssErr != nil {
-		fmt.Println(cssErr)
+	navWrite.Write(buf.Bytes())
+
+	Toctmpl, _ := template.New("toc").Parse(TocTemp)
+	buf.Reset()
+	Toctmpl.Execute(&buf, map[string]interface{}{"Title": title, "Chapters": Chapters})
+
+	tocWrite, err := pub.Add(fmt.Sprint("toc.ncx"), epub.ContentTypeMedia)
+	if err != nil {
+		fmt.Println(err)
 		return
 	}
-	cssWrite.Write(MainCSS)
-	if ficImage != "" { //You never know.
+	tocWrite.Write(buf.Bytes())
+
+}
+
+func chapWrite(pub *epub.Writer, i int, content []byte) {
+	//Create our file.
+	write, err := pub.Add(fmt.Sprintf("text/Section-%03d.xhtml", i), epub.ContentTypePrimary)
+	if err != nil {
+		fmt.Println("Error adding chapter...", err)
+		return
+	}
+	write.Write(content)
+}
+
+func getCover(pub *epub.Writer, image string, dest *url.URL) {
+	if image != "" { //You never know.
 		var imgName string
-		fmt.Println("Downloading cover image.")
-		//Make a buffer, and write the image contents to it.
-		if ficImage[:5] == "data:" { //If it's a Data URI
+
+		if image[:5] == "data:" { //If it's a Data URI
 			//First download the image (or in this case add it to a file, ie. /images/cover.png)
-			dataURL, derr := dataurl.DecodeString(ficImage)
-			if derr != nil {
-				fmt.Println(derr)
+			dataURL, err := dataurl.DecodeString(image)
+			if err != nil {
+				fmt.Println(err)
 				return
 			}
 			memeImage := map[string]string{"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif"}
 			imgName = fmt.Sprintf("images/cover.%s", memeImage[dataURL.Type])
-			coverWrite, cverr := writer.Add(imgName, epub.ContentTypeMedia, "cover-image")
-			if cverr != nil {
-				fmt.Println(cverr)
+			coverWrite, err := pub.Add(imgName, epub.ContentTypeMedia, "cover-image")
+			if err != nil {
+				fmt.Println(err)
 				return
 			}
 			dataURL.WriteTo(coverWrite) //Write to EPUB
 		} else {
-			imgURL, uerr := url.Parse(ficImage)
-			if uerr != nil {
-				fmt.Println(uerr)
+			//Parse URL relative to dest. This ensures relative URLs will resolve correctly.
+			imgURL, err := dest.Parse(image)
+			if err != nil {
+				fmt.Println(err)
 				return
 			}
 			imgURL.Scheme = "https" //Make sure to use HTTPS
-			resp, rerr := http.Get(imgURL.String())
-			if rerr != nil {
-				fmt.Println(rerr)
+			resp, err := http.Get(imgURL.String())
+			if err != nil {
+				fmt.Println(err)
 				return
 			}
 			defer resp.Body.Close()
 			//Use the URL's extension for the file. May or may not work..?
 			imgName = fmt.Sprintf("images/cover.%s", imgURL.Path[strings.LastIndex(imgURL.Path, ".")+1:])
-			coverWrite, cverr := writer.Add(imgName, epub.ContentTypeMedia, "cover-image")
-			if cverr != nil {
-				fmt.Println(cverr)
+			coverWrite, err := pub.Add(imgName, epub.ContentTypeMedia, "cover-image")
+			if err != nil {
+				fmt.Println(err)
 				return
 			}
-			by, berr := ioutil.ReadAll(resp.Body)
-			if berr != nil {
-				fmt.Println(berr)
+			by, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				fmt.Println(err)
 				return
 			}
-			var b bytes.Buffer
-			b.Write(by)
-			b.WriteTo(coverWrite) //Write to EPUB.
+			var buf bytes.Buffer
+			buf.Write(by)
+			buf.WriteTo(coverWrite) //Write to EPUB.
 		}
-		fmt.Println("Creating cover.xhtml")
-		chapWrite, chErr := writer.Add("text/cover.xhtml", epub.ContentTypePrimary)
-		if chErr != nil {
-			fmt.Println(chErr)
+		chapWrite, err := pub.Add("text/cover.xhtml", epub.ContentTypePrimary)
+		if err != nil {
+			fmt.Println(err)
 			return
 		}
-
 		tmpl, _ := template.New("cover").Parse(CoverTemplate)
-		var bu bytes.Buffer
-		tmpl.Execute(&bu, map[string]string{"Filename": imgName})
-		chapWrite.Write(bu.Bytes())
-
+		var buf bytes.Buffer
+		tmpl.Execute(&buf, map[string]string{"Filename": imgName})
+		chapWrite.Write(buf.Bytes())
 	}
+}
 
-	var Chapters []map[string]string
-	fmt.Println("Downloading chapters.")
-	tmpl, _ := template.New("chap").Parse(MainTemplate)
+func buildEpub(metadata map[string]string) (*epub.Writer, error) {
+	workingDir, _ := os.Getwd()
+	re := regexp.MustCompile("([[:space:]]|[[:cntrl:]]|[\\\\/:*?\"<>|])+")
+	filename := fmt.Sprintf("%s/%s.epub", workingDir, re.ReplaceAllString(metadata["title"], "_"))
+	os.Create(filename)
 
-	//Iterate through chapters.
-	doc.Find("#chapters tr>td a[href ^= '/fiction/chapter/']").Each(func(i int, s *goquery.Selection) {
-		chapTitle := strings.TrimSpace(s.Text())
-		fmt.Println("Adding:", chapTitle)
-	TryAgain:
-		chURL, _ := s.Attr("href")
-		chURL = "https://royalroadl.com/" + chURL
-		chap, err := goquery.NewDocument(chURL)
-		if err != nil {
-			fmt.Println(err, "\nTrying again...")
-			goto TryAgain
-		}
-		//Make sure the title is there, to verify the thread loaded properly.
-		if chap.Find(".fic-header .md-text-left h2").Text() == "" { //Verify the page loaded properly.
-			fmt.Println("Page did not load properly. \nTrying again...")
-			goto TryAgain
-		}
-		chapContent, _ := chap.Find(".portlet-body .chapter-content").Html() //The contents of our chapter.
-
-		//Create our file.
-		chapWrite, chErr := writer.Add(fmt.Sprintf("text/Section-%03d.xhtml", i), epub.ContentTypePrimary)
-		if chErr != nil {
-			fmt.Println(chErr, "\nTrying again...")
-			goto TryAgain
-		}
-		outs := map[string]string{"Title": chapTitle, "Body": chapContent}
-		var b bytes.Buffer
-		tmpl.Execute(&b, outs)
-
-		//Now that we have created our Document, we need to sanitize it.
-		//RRL still uses some legacy parameters, and also throws in things like the nav bar and donation button.
-		chapt, err := goquery.NewDocumentFromReader(bytes.NewReader(b.Bytes()))
-		if err != nil {
-			fmt.Println(err, "\nChapter skipped...")
-			return
-		}
-
-		//Remove the table "bgcolor" attribute, which has been depricated for ages.
-		chapt.Find("table[bgcolor]").RemoveAttr("bgcolor")
-		//Remove "border" attribute from images (because MyBB...)
-		chapt.Find("img[border]").RemoveAttr("border")
-
-		//Nothing can be done about Author Notes, because every author structures them differently.
-		st, err := goquery.OuterHtml(chapt.First())
-		if err != nil {
-			fmt.Println(err, "\nChapter skipped...")
-			return
-		}
-
-		re = regexp.MustCompile("\\s*\\*Edited as of \\w+ \\d+, \\d+\\*") //Remove *Edited as of Month 00, 0000* message.
-		st = re.ReplaceAllString(st, "")
-
-		chapWrite.Write([]byte(st))
-		Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("text/Section-%03d.xhtml", i), "Title": chapTitle})
-	})
-	fmt.Println("Generating Table of Contents.")
-	Ntmpl, _ := template.New("nav").Parse(NavTemp)
-	var b bytes.Buffer
-	Ntmpl.Execute(&b, Chapters)
-
-	navWrite, err := writer.Add(fmt.Sprint("text/nav.xhtml"), epub.ContentTypeAuxiliary, "nav")
+	//Create Epub file, and name it after the story.
+	writer, err := epub.Create(filename)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return nil, err
 	}
-	navWrite.Write(b.Bytes())
 
-	Ttmpl, _ := template.New("toc").Parse(TocTemp)
-	var bt bytes.Buffer
-	Ttmpl.Execute(&bt, map[string]interface{}{"Title": ficTitle, "Chapters": Chapters})
-
-	tocWrite, err := writer.Add(fmt.Sprint("toc.ncx"), epub.ContentTypeMedia)
-	if err != nil {
-		fmt.Println(err)
-		return
+	cssWrite, cssErr := writer.Add("text/style.css", epub.ContentTypeMedia)
+	if cssErr != nil {
+		fmt.Println(cssErr)
+		return nil, err
 	}
-	tocWrite.Write(bt.Bytes())
+	cssWrite.Write(MainCSS)
+	writer.Metadata = epub.CreateMetadata(metadata)
 
-	writer.Metadata = epub.CreateMetadata(map[string]string{"title": ficTitle, "author": ficAuthor})
-	writer.Close()
+	return writer, nil
+}
+
+// A simple Join function, that combines a slice of strings, seperated by a delimeter. The reverse of strings.Split.
+func join(slice []string, sep string) string {
+	var str string
+	l := len(slice)
+	for k, s := range slice {
+		str += s
+		if k != l-1 {
+			str += sep
+		}
+	}
+	return str
 }
 
 //Templates and stuff for constructing the EPUB files.
 var MainTemplate = string(`<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-<head>
-<title>{{.Title}}</title>
-<link href="style.css" type="text/css" rel="stylesheet"/>
-</head>
-<body>
-<h2>{{.Title}}</h2>
-{{.Body}}
-</body>
+	<head>
+		<title>{{.Title}}</title>
+		<link href="style.css" type="text/css" rel="stylesheet"/>
+	</head>
+	<body>
+		<h2>{{.Title}}</h2>
+	{{.Body}}
+	</body>
 </html>`)
 
 var CoverTemplate = string(`<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-<head>
-<title>Cover</title>
-<link href="style.css" type="text/css" rel="stylesheet"/>
-</head>
-<body>
-<div style="text-align: center; padding: 0pt; margin: 0pt;">
-<img src="../{{.Filename}}" />
-</div>
-</body>
-</html>
-`)
+	<head>
+		<title>Cover</title>
+		<link href="style.css" type="text/css" rel="stylesheet"/>
+	</head>
+	<body>
+		<div style="text-align: center; padding: 0pt; margin: 0pt;">
+			<img src="../{{.Filename}}" />
+		</div>
+	</body>
+</html>`)
 
 var MainCSS = []byte(`a:link {
     color: #329FCF;
