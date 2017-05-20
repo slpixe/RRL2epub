@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
-	"text/template"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -44,7 +42,6 @@ func royalRoadL(dest *url.URL) {
 
 	var Chapters []map[string]string
 	fmt.Println("Downloading chapters.")
-	tmpl, _ := template.New("chap").Parse(MainTemplate)
 
 	//Iterate through chapters.
 	doc.Find("#chapters tr>td a[href ^= '/fiction/chapter/']").Each(func(i int, s *goquery.Selection) {
@@ -63,35 +60,29 @@ func royalRoadL(dest *url.URL) {
 			fmt.Println("Page did not load properly. \nTrying again...")
 			goto TryAgain
 		}
-		chapContent, _ := chap.Find(".portlet-body .chapter-content").Html() //The contents of our chapter.
+		chapt := chap.Find(".portlet-body .chapter-content") //The contents of our chapter.
 
-		outs := map[string]string{"Title": chapTitle, "Body": chapContent}
-		var b bytes.Buffer
-		tmpl.Execute(&b, outs)
-
-		//Now that we have created our Document, we need to sanitize it.
+		//Now that we have retreived our Document, we need to sanitize it.
 		//RRL still uses some legacy parameters, and also throws in things like the nav bar and donation button.
-		chapt, err := goquery.NewDocumentFromReader(bytes.NewReader(b.Bytes()))
-		if err != nil {
-			fmt.Println(err, "\nChapter skipped...")
-			return
-		}
+
 		//Remove the table "bgcolor" attribute, which has been depricated for ages.
 		chapt.Find("table[bgcolor]").RemoveAttr("bgcolor")
 		//Remove "border" attribute from images (because MyBB...)
 		chapt.Find("img[border]").RemoveAttr("border")
 
 		//Nothing can be done about Author Notes, because every author structures them differently.
-		st, err := goquery.OuterHtml(chapt.First())
+		chapHtml, err := chapt.Html()
 		if err != nil {
 			fmt.Println(err, "\nChapter skipped...")
 			return
 		}
 
 		re := regexp.MustCompile("\\s*\\*Edited as of \\w+ \\d+, \\d+\\*") //Remove *Edited as of Month 00, 0000* message.
-		st = re.ReplaceAllString(st, "")
+		chapHtml = re.ReplaceAllString(chapHtml, "")
 
-		chapWrite(pub, i, []byte(st))
+		outs := map[string]string{"Title": chapTitle, "Body": chapHtml}
+
+		chapWrite(pub, i, outs)
 		Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("text/Section-%03d.xhtml", i), "Title": chapTitle})
 	})
 	fmt.Println("Generating Table of Contents.")

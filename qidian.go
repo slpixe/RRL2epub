@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"net/url"
 	"strings"
-	"text/template"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -58,7 +56,6 @@ func qidian(dest *url.URL) {
 
 	var Chapters []map[string]string
 	fmt.Println("Downloading chapters.")
-	tmpl, _ := template.New("chap").Parse(MainTemplate)
 
 	//Iterate through chapters.
 	doc.Find("#contentsModal ul.content-list li a").Each(func(i int, s *goquery.Selection) {
@@ -84,10 +81,7 @@ func qidian(dest *url.URL) {
 		chapHtml, _ := chapContent.Html()
 
 		outs := map[string]string{"Title": chapTitle, "Body": chapHtml}
-		var buf bytes.Buffer
-		tmpl.Execute(&buf, outs)
-
-		chapWrite(pub, i, buf.Bytes())
+		chapWrite(pub, i, outs)
 		Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("text/Section-%03d.xhtml", i), "Title": chapTitle})
 	})
 	fmt.Println("Generating Table of Contents.")

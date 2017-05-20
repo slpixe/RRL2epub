@@ -121,7 +121,7 @@ func scheme(scheme, format string) func(*EndPoint) {
 }
 
 func genTOC(pub *epub.Writer, Chapters []map[string]string, title string) {
-	Navtmpl, _ := template.New("nav").Parse(NavTemp)
+	Navtmpl, _ := template.New("nav").Parse(navTemp)
 	var buf bytes.Buffer
 	Navtmpl.Execute(&buf, Chapters)
 
@@ -132,7 +132,7 @@ func genTOC(pub *epub.Writer, Chapters []map[string]string, title string) {
 	}
 	navWrite.Write(buf.Bytes())
 
-	Toctmpl, _ := template.New("toc").Parse(TocTemp)
+	Toctmpl, _ := template.New("toc").Parse(tocTemp)
 	buf.Reset()
 	Toctmpl.Execute(&buf, map[string]interface{}{"Title": title, "Chapters": Chapters})
 
@@ -145,14 +145,24 @@ func genTOC(pub *epub.Writer, Chapters []map[string]string, title string) {
 
 }
 
-func chapWrite(pub *epub.Writer, i int, content []byte) {
+var maintmpl *template.Template
+
+func chapWrite(pub *epub.Writer, i int, content map[string]string) {
+	//Initialize template.
+	if maintmpl == nil {
+		maintmpl, _ = template.New("chap").Parse(mainTemplate)
+	}
 	//Create our file.
 	write, err := pub.Add(fmt.Sprintf("text/Section-%03d.xhtml", i), epub.ContentTypePrimary)
 	if err != nil {
 		fmt.Println("Error adding chapter...", err)
 		return
 	}
-	write.Write(content)
+
+	var buf bytes.Buffer
+	maintmpl.Execute(&buf, content)
+
+	write.Write(buf.Bytes())
 }
 
 func getCover(pub *epub.Writer, image string, dest *url.URL) {
@@ -209,7 +219,7 @@ func getCover(pub *epub.Writer, image string, dest *url.URL) {
 			fmt.Println(err)
 			return
 		}
-		tmpl, _ := template.New("cover").Parse(CoverTemplate)
+		tmpl, _ := template.New("cover").Parse(coverTemplate)
 		var buf bytes.Buffer
 		tmpl.Execute(&buf, map[string]string{"Filename": imgName})
 		chapWrite.Write(buf.Bytes())
@@ -233,13 +243,13 @@ func buildEpub(metadata map[string]string) (*epub.Writer, error) {
 		fmt.Println(cssErr)
 		return nil, err
 	}
-	cssWrite.Write(MainCSS)
+	cssWrite.Write(mainCSS)
 	writer.Metadata = epub.CreateMetadata(metadata)
 
 	return writer, nil
 }
 
-// A simple Join function, that combines a slice of strings, seperated by a delimeter. The reverse of strings.Split.
+// A simple Join function, that combines a slice of strings, separated by a delimeter. The reverse of strings.Split.
 func join(slice []string, sep string) string {
 	var str string
 	l := len(slice)
@@ -253,7 +263,7 @@ func join(slice []string, sep string) string {
 }
 
 //Templates and stuff for constructing the EPUB files.
-var MainTemplate = string(`<?xml version="1.0" encoding="utf-8"?>
+var mainTemplate = string(`<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 	<head>
@@ -266,7 +276,7 @@ var MainTemplate = string(`<?xml version="1.0" encoding="utf-8"?>
 	</body>
 </html>`)
 
-var CoverTemplate = string(`<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+var coverTemplate = string(`<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 	<head>
@@ -280,7 +290,7 @@ var CoverTemplate = string(`<?xml version="1.0" encoding="UTF-8" standalone="no"
 	</body>
 </html>`)
 
-var MainCSS = []byte(`a:link {
+var mainCSS = []byte(`a:link {
     color: #329FCF;
     text-decoration: none
 }
@@ -358,7 +368,7 @@ table tr td, table tr th, table thead th {
 */
 `)
 
-var NavTemp = string(`<?xml version="1.0" encoding="utf-8"?>
+var navTemp = string(`<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en" xml:lang="en">
@@ -397,7 +407,7 @@ var NavTemp = string(`<?xml version="1.0" encoding="utf-8"?>
   </nav>
 </body>
 </html>`)
-var TocTemp = string(`<?xml version="1.0" encoding="utf-8" ?>
+var tocTemp = string(`<?xml version="1.0" encoding="utf-8" ?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
 <head>
 <meta content="1" name="dtb:depth"/>
