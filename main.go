@@ -16,38 +16,107 @@ import (
 )
 
 func main() {
-	dest, err := url.Parse(join(os.Args[1:], " "))
-	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-		fmt.Println("Argument must be a valid absolute URL.")
-		return
-	}
-	switch dest.Scheme {
-	case "":
-		fmt.Println("Argument must be a valid absolute URL.")
-		return
-	case "http", "https":
-		switch dest.Hostname() {
-		case "royalroadl.com":
-			royalRoadL(dest)
-			return
-		case "webnovel.com", "www.webnovel.com":
-			qidian(dest)
-			return
-		default:
-			fmt.Println("This host is not supported.")
-			return
+
+	//So this is somewhat straightforward.
+	//AddEndPoint() adds an End Point that can be used to download a webnovel as an EPUB.
+	//The first argument is the function which handles the actual downloading
+	//Following that are functions which configure the endpoint.
+	//hosts() is a variable number of domain names to accept.
+	//scheme() sets a single scheme and format, assuming scheme:%s
+	//	For URLs with multiple variables, delimeter as such: scheme:%s/%s/%s
+
+	AddEndPoint(royalRoadL,
+		hosts("royalroadl.com"),
+		scheme("rrl", "https://royalroadl.com/fiction/%s"))
+	AddEndPoint(qidian,
+		hosts("webnovel.com", "www.webnovel.com"),
+		scheme("wn", "https://www.webnovel.com/book/%s"))
+
+	for _, arg := range os.Args[1:] {
+		dest, err := url.Parse(arg)
+		if err != nil {
+			fmt.Println("Error parsing URL:", err)
+			continue
 		}
-	case "rrl":
-		newdest, _ := url.Parse(fmt.Sprintf("https://royalroadl.com/fiction/%s", dest.Opaque))
-		royalRoadL(newdest)
-		return
-	case "wn":
-		newdest, _ := url.Parse(fmt.Sprintf("https://www.webnovel.com/book/%s", dest.Opaque))
-		qidian(newdest)
-	default:
-		fmt.Println("This scheme is not supported. Use either http, https, rrl, or wn.")
-		return
+		//Try getting end point, as though it were a host.
+		if end, b := GetHost(dest.Hostname()); b {
+			end.Handler(dest)
+			continue
+		}
+		//Try getting end point via the scheme.
+		if end, b := GetScheme(dest.Scheme); b {
+			sopts := strings.Split(dest.Opaque, "/")
+			//TODO make sure the number of strings matches the format.
+			//Right now, it kinda just assumes the person knows the right format,
+			//and lets the runtime error tell them otherwise.
+
+			// Need to convert this slice of strings into a slice of interfaces.
+			// Complicated memory reasons that has to do with the underlying compiler.
+			iopts := make([]interface{}, len(sopts))
+			for i, v := range sopts {
+				iopts[i] = v
+			}
+			newdest, err := url.Parse(fmt.Sprintf(end.Format, iopts...))
+			if err != nil {
+				fmt.Println("Error parsing URL:", err)
+				continue
+			}
+			// TODO: Make the Fragment actually do something.
+			// Possibly for selecting and excluding certain chapters?
+			newdest.Fragment = dest.Fragment
+			end.Handler(newdest)
+			continue
+		}
+		fmt.Println("No handler found for:", arg)
+	}
+}
+
+var handlers []*EndPoint
+
+type EndPoint struct {
+	Handler        func(*url.URL)
+	Scheme, Format string
+	Hosts          []string
+}
+
+func GetScheme(str string) (*EndPoint, bool) {
+	for _, end := range handlers {
+		if end.Scheme == str {
+			return end, true
+		}
+	}
+	return nil, false
+}
+
+func GetHost(str string) (*EndPoint, bool) {
+	for _, end := range handlers {
+		for _, host := range end.Hosts {
+			if host == str {
+				return end, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func AddEndPoint(handler func(*url.URL), options ...func(*EndPoint)) {
+	var end EndPoint
+	end.Handler = handler
+	for _, option := range options {
+		option(&end)
+	}
+	handlers = append(handlers, &end)
+}
+func hosts(hosts ...string) func(*EndPoint) {
+	return func(e *EndPoint) {
+		for _, host := range hosts {
+			e.Hosts = append(e.Hosts, host)
+		}
+	}
+}
+func scheme(scheme, format string) func(*EndPoint) {
+	return func(e *EndPoint) {
+		e.Scheme, e.Format = scheme, format
 	}
 }
 
