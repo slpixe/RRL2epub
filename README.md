@@ -4,7 +4,7 @@ As the title and description suggests, this is a program to convert RoyalRoadL f
 
 **Update:** Tool has been updated to handle webnovels on webnovel.com as well.
 
-##Usage
+## Usage
 
 Use of this program is simple. Using a terminal, go to the directory of the binary and then use the following command:
 
