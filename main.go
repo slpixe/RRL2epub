@@ -21,16 +21,16 @@ func main() {
 	//AddEndPoint() adds an End Point that can be used to download a webnovel as an EPUB.
 	//The first argument is the function which handles the actual downloading
 	//Following that are functions which configure the endpoint.
-	//hosts() is a variable number of domain names to accept.
-	//scheme() sets a single scheme and format, assuming scheme:%s
+	//Hosts() is a variable number of domain names to accept.
+	//Scheme() sets a single scheme and format, assuming scheme:%s
 	//	For URLs with multiple variables, delimeter as such: scheme:%s/%s/%s
 
 	AddEndPoint(royalRoadL,
-		hosts("royalroadl.com"),
-		scheme("rrl", "https://royalroadl.com/fiction/%s"))
+		Hosts("royalroadl.com"),
+		Scheme("rrl", "https://royalroadl.com/fiction/%s"))
 	AddEndPoint(qidian,
-		hosts("webnovel.com", "www.webnovel.com"),
-		scheme("wn", "https://www.webnovel.com/book/%s"))
+		Hosts("webnovel.com", "www.webnovel.com"),
+		Scheme("wn", "https://www.webnovel.com/book/%s"))
 
 	for _, arg := range os.Args[1:] {
 		dest, err := url.Parse(arg)
@@ -73,12 +73,15 @@ func main() {
 
 var handlers []*EndPoint
 
+// And EndPoint represents a handler to build an EPUB, and the schemes and hosts that should
+// be able to call it.
 type EndPoint struct {
 	Handler        func(*url.URL)
 	Scheme, Format string
 	Hosts          []string
 }
 
+// Returns the EndPoint with the given scheme. The second value returns true if found, false otherwise.
 func GetScheme(str string) (*EndPoint, bool) {
 	for _, end := range handlers {
 		if end.Scheme == str {
@@ -88,6 +91,7 @@ func GetScheme(str string) (*EndPoint, bool) {
 	return nil, false
 }
 
+// Returns the EndPoint with the given host. The second value returns true if found, false otherwise.
 func GetHost(str string) (*EndPoint, bool) {
 	for _, end := range handlers {
 		for _, host := range end.Hosts {
@@ -99,6 +103,15 @@ func GetHost(str string) (*EndPoint, bool) {
 	return nil, false
 }
 
+// Adds an EndPoint that can be used to download a webnovel as an EPUB.
+// The first argument is the function which handles the actual downloading, and
+// following that are functions which configure the EndPoint.
+//
+// For example, if you want to create an EndPoint that can be used with the domain
+// example.com *and* www.example.com, and uses the handler function `example`,
+// you would use:
+//  AddEndPoint(example,
+//  	Hosts("example.com", "www.example.com"))
 func AddEndPoint(handler func(*url.URL), options ...func(*EndPoint)) {
 	var end EndPoint
 	end.Handler = handler
@@ -107,14 +120,24 @@ func AddEndPoint(handler func(*url.URL), options ...func(*EndPoint)) {
 	}
 	handlers = append(handlers, &end)
 }
-func hosts(hosts ...string) func(*EndPoint) {
+
+// Returns a function which can be used to configure an EndPoint, adding one or
+// more hosts to the handler.
+func Hosts(hosts ...string) func(*EndPoint) {
 	return func(e *EndPoint) {
 		for _, host := range hosts {
 			e.Hosts = append(e.Hosts, host)
 		}
 	}
 }
-func scheme(scheme, format string) func(*EndPoint) {
+
+// Returns a function which can be used to configure an EndPoint, adding a
+// scheme, and a URL format to be used with the scheme.
+//
+// For URLs with multiple variables, the format may have multiple verbs. The
+// resulting URL should appear something like `scheme:var1/var2`, separated
+// by slashes, like a path.
+func Scheme(scheme, format string) func(*EndPoint) {
 	return func(e *EndPoint) {
 		e.Scheme, e.Format = scheme, format
 	}
