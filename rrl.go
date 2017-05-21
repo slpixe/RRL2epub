@@ -48,8 +48,8 @@ func royalRoadL(dest *url.URL) {
 		chapTitle := strings.TrimSpace(s.Text())
 		fmt.Println("Adding:", chapTitle)
 	TryAgain:
-		chUrl, _ := s.Attr("href")
-		chURL, _ := dest.Parse(chUrl)
+		schURL, _ := s.Attr("href")
+		chURL, _ := dest.Parse(schURL)
 		chap, err := goquery.NewDocument(chURL.String())
 		if err != nil {
 			fmt.Println(err, "\nTrying again...")
@@ -71,16 +71,16 @@ func royalRoadL(dest *url.URL) {
 		chapt.Find("img[border]").RemoveAttr("border")
 
 		//Nothing can be done about Author Notes, because every author structures them differently.
-		chapHtml, err := chapt.Html()
+		chapHTML, err := chapt.Html()
 		if err != nil {
 			fmt.Println(err, "\nChapter skipped...")
 			return
 		}
 
 		re := regexp.MustCompile("\\s*\\*Edited as of \\w+ \\d+, \\d+\\*") //Remove *Edited as of Month 00, 0000* message.
-		chapHtml = re.ReplaceAllString(chapHtml, "")
+		chapHTML = re.ReplaceAllString(chapHTML, "")
 
-		outs := map[string]string{"Title": chapTitle, "Body": chapHtml}
+		outs := map[string]string{"Title": chapTitle, "Body": chapHTML}
 
 		chapWrite(pub, i, outs)
 		Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("text/Section-%03d.xhtml", i), "Title": chapTitle})

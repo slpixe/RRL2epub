@@ -73,7 +73,7 @@ func main() {
 
 var handlers []*EndPoint
 
-// And EndPoint represents a handler to build an EPUB, and the schemes and hosts that should
+// EndPoint represents a handler to build an EPUB, and the schemes and hosts that should
 // be able to call it.
 type EndPoint struct {
 	Handler        func(*url.URL)
@@ -81,7 +81,8 @@ type EndPoint struct {
 	Hosts          []string
 }
 
-// Returns the EndPoint with the given scheme. The second value returns true if found, false otherwise.
+// GetScheme returns the EndPoint with the given scheme. The second value returns true
+// if found, false otherwise.
 func GetScheme(str string) (*EndPoint, bool) {
 	for _, end := range handlers {
 		if end.Scheme == str {
@@ -91,7 +92,8 @@ func GetScheme(str string) (*EndPoint, bool) {
 	return nil, false
 }
 
-// Returns the EndPoint with the given host. The second value returns true if found, false otherwise.
+// GetHost returns the EndPoint with the given host. The second value returns true if
+// found, false otherwise.
 func GetHost(str string) (*EndPoint, bool) {
 	for _, end := range handlers {
 		for _, host := range end.Hosts {
@@ -103,7 +105,7 @@ func GetHost(str string) (*EndPoint, bool) {
 	return nil, false
 }
 
-// Adds an EndPoint that can be used to download a webnovel as an EPUB.
+// AddEndPoint Adds a handler that can be used to download a webnovel as an EPUB.
 // The first argument is the function which handles the actual downloading, and
 // following that are functions which configure the EndPoint.
 //
@@ -121,7 +123,7 @@ func AddEndPoint(handler func(*url.URL), options ...func(*EndPoint)) {
 	handlers = append(handlers, &end)
 }
 
-// Returns a function which can be used to configure an EndPoint, adding one or
+// Hosts returns a function which can be used to configure an EndPoint, adding one or
 // more hosts to the handler.
 func Hosts(hosts ...string) func(*EndPoint) {
 	return func(e *EndPoint) {
@@ -131,7 +133,7 @@ func Hosts(hosts ...string) func(*EndPoint) {
 	}
 }
 
-// Returns a function which can be used to configure an EndPoint, adding a
+// Scheme returns a function which can be used to configure an EndPoint, adding a
 // scheme, and a URL format to be used with the scheme.
 //
 // For URLs with multiple variables, the format may have multiple verbs. The

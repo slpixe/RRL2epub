@@ -62,8 +62,8 @@ func qidian(dest *url.URL) {
 		chapTitle := strings.Title(s.Text())
 		fmt.Println("Adding:", chapTitle)
 	TryAgain:
-		chUrl, _ := s.Attr("href")
-		chURL, _ := dest.Parse(chUrl)
+		schURL, _ := s.Attr("href")
+		chURL, _ := dest.Parse(schURL)
 		chap, err := goquery.NewDocument(chURL.String())
 		if err != nil {
 			fmt.Println(err, "\nTrying again...")
@@ -78,9 +78,9 @@ func qidian(dest *url.URL) {
 		//Return the chapter contents, without the scoring.
 		chapContent := chap.Find(".cha-content") //The contents of our chapter.
 		chapContent.Find(".cha-score").Remove()
-		chapHtml, _ := chapContent.Html()
+		chapHTML, _ := chapContent.Html()
 
-		outs := map[string]string{"Title": chapTitle, "Body": chapHtml}
+		outs := map[string]string{"Title": chapTitle, "Body": chapHTML}
 		chapWrite(pub, i, outs)
 		Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("text/Section-%03d.xhtml", i), "Title": chapTitle})
 	})
