@@ -18,7 +18,7 @@ func royalRoadL(dest *url.URL) {
 		return
 	}
 	//Check for title. If title can't be found, we have a problem.
-	ficTitle := doc.Find("div.fic-header > .fic-title > h2[property='name']").Text()
+	ficTitle := doc.Find("div.fic-header > .fic-title > [property='name']").Text()
 	if ficTitle == "" {
 		fmt.Println("Error communicating with RRL, or with the given Fiction ID")
 		return
@@ -44,7 +44,7 @@ func royalRoadL(dest *url.URL) {
 	fmt.Println("Downloading chapters.")
 
 	//Iterate through chapters.
-	doc.Find("#chapters tr>td a[href ^= '/fiction/chapter/']").Each(func(i int, s *goquery.Selection) {
+	doc.Find("#chapters tr>td a[href ^= '/fiction/']").Each(func(i int, s *goquery.Selection) {
 		chapTitle := strings.TrimSpace(s.Text())
 		fmt.Println("Adding:", chapTitle)
 	TryAgain:
