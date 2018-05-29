@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -150,24 +149,21 @@ func genTOC(pub *epub.Writer, Chapters []map[string]string, title string) {
 	var buf bytes.Buffer
 	Navtmpl.Execute(&buf, Chapters)
 
-	navWrite, err := pub.Add(fmt.Sprint("text/nav.xhtml"), epub.ContentTypeAuxiliary, "nav")
+	err := pub.Add("text/nav.xhtml", epub.CTAuxiliary, &buf, "nav")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	navWrite.Write(buf.Bytes())
 
 	Toctmpl, _ := template.New("toc").Parse(tocTemp)
 	buf.Reset()
 	Toctmpl.Execute(&buf, map[string]interface{}{"Title": title, "Chapters": Chapters})
 
-	tocWrite, err := pub.Add(fmt.Sprint("toc.ncx"), epub.ContentTypeMedia)
+	err = pub.Add("toc.ncx", epub.CTMedia, &buf)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	tocWrite.Write(buf.Bytes())
-
 }
 
 var maintmpl *template.Template
@@ -177,17 +173,17 @@ func chapWrite(pub *epub.Writer, i int, content map[string]string) {
 	if maintmpl == nil {
 		maintmpl, _ = template.New("chap").Parse(mainTemplate)
 	}
+
+	//Generate chapter.
+	var buf bytes.Buffer
+	maintmpl.Execute(&buf, content)
+
 	//Create our file.
-	write, err := pub.Add(fmt.Sprintf("text/Section-%03d.xhtml", i), epub.ContentTypePrimary)
+	err := pub.Add(fmt.Sprintf("text/Section-%03d.xhtml", i), epub.CTPrimary, &buf)
 	if err != nil {
 		fmt.Println("Error adding chapter...", err)
 		return
 	}
-
-	var buf bytes.Buffer
-	maintmpl.Execute(&buf, content)
-
-	write.Write(buf.Bytes())
 }
 
 func getCover(pub *epub.Writer, image string, dest *url.URL) {
@@ -203,12 +199,13 @@ func getCover(pub *epub.Writer, image string, dest *url.URL) {
 			}
 			memeImage := map[string]string{"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif"}
 			imgName = fmt.Sprintf("images/cover.%s", memeImage[dataURL.Type])
-			coverWrite, err := pub.Add(imgName, epub.ContentTypeMedia, "cover-image")
+			var buf bytes.Buffer
+			dataURL.WriteTo(&buf)
+			err = pub.Add(imgName, epub.CTMedia, &buf, "cover-image")
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
-			dataURL.WriteTo(coverWrite) //Write to EPUB
 		} else {
 			//Parse URL relative to dest. This ensures relative URLs will resolve correctly.
 			imgURL, err := dest.Parse(image)
@@ -225,29 +222,20 @@ func getCover(pub *epub.Writer, image string, dest *url.URL) {
 			defer resp.Body.Close()
 			//Use the URL's extension for the file. May or may not work..?
 			imgName = fmt.Sprintf("images/cover.%s", imgURL.Path[strings.LastIndex(imgURL.Path, ".")+1:])
-			coverWrite, err := pub.Add(imgName, epub.ContentTypeMedia, "cover-image")
+			err = pub.Add(imgName, epub.CTMedia, resp.Body, "cover-image")
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
-			by, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			var buf bytes.Buffer
-			buf.Write(by)
-			buf.WriteTo(coverWrite) //Write to EPUB.
-		}
-		chapWrite, err := pub.Add("text/cover.xhtml", epub.ContentTypePrimary)
-		if err != nil {
-			fmt.Println(err)
-			return
 		}
 		tmpl, _ := template.New("cover").Parse(coverTemplate)
 		var buf bytes.Buffer
 		tmpl.Execute(&buf, map[string]string{"Filename": imgName})
-		chapWrite.Write(buf.Bytes())
+		err := pub.Add("text/cover.xhtml", epub.CTPrimary, &buf)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 }
 
@@ -263,12 +251,12 @@ func buildEpub(metadata map[string]string) (*epub.Writer, error) {
 		return nil, err
 	}
 
-	cssWrite, cssErr := writer.Add("text/style.css", epub.ContentTypeMedia)
-	if cssErr != nil {
-		fmt.Println(cssErr)
+	buf := bytes.NewBuffer(mainCSS)
+	err = writer.Add("text/style.css", epub.CTMedia, buf)
+	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
-	cssWrite.Write(mainCSS)
 	writer.Metadata = epub.CreateMetadata(metadata)
 
 	return writer, nil
