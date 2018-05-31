@@ -179,7 +179,7 @@ func chapWrite(pub *epub.Writer, i int, content map[string]string) {
 	maintmpl.Execute(&buf, content)
 
 	//Create our file.
-	err := pub.Add(fmt.Sprintf("text/Section-%03d.xhtml", i), epub.CTPrimary, &buf)
+	err := pub.Add(fmt.Sprintf("text/Section-%04d.xhtml", i), epub.CTPrimary, &buf)
 	if err != nil {
 		fmt.Println("Error adding chapter...", err)
 		return
