@@ -242,7 +242,7 @@ func getCover(pub *epub.Writer, image string, dest *url.URL) {
 func buildEpub(metadata map[string]string) (*epub.Writer, error) {
 	workingDir, _ := os.Getwd()
 	re := regexp.MustCompile("([[:space:]]|[[:cntrl:]]|[\\\\/:*?\"<>|])+")
-	filename := fmt.Sprintf("%s/%s.epub", workingDir, re.ReplaceAllString(metadata["title"], "_"))
+	filename := fmt.Sprintf("%s/out/%s.epub", workingDir, re.ReplaceAllString(metadata["title"], "_"))
 	os.Create(filename)
 
 	//Create Epub file, and name it after the story.
