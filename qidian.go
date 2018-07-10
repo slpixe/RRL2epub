@@ -141,9 +141,9 @@ func qidian(dest *url.URL) {
 					re := strings.NewReplacer("\n\r", "<br/>", "\n", "<br/>")
 					content = re.Replace(ChInfo.Data.ChapterInfo.Content)
 				}
-				outs := map[string]string{"Title": chitem.Name, "Body": content}
+				outs := map[string]string{"Title": fmt.Sprintf("%d%s%s", chitem.Index, ": ", chitem.Name), "Body": content}
 				chapWrite(pub, chitem.Index, outs)
-				Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("text/Section-%04d.xhtml", chitem.Index), "Title": chitem.Name})
+				Chapters = append(Chapters, map[string]string{"Path": fmt.Sprintf("text/Section-%04d.xhtml", chitem.Index), "Title": fmt.Sprintf("%d%s%s", chitem.Index, ": ", chitem.Name)})
 			}
 		}
 	}
