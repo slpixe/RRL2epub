@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
+	"github.com/slpixe/goquery"
 )
 
 // The starting point for RoyalRoadL

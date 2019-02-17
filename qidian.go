@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
+	"github.com/slpixe/goquery"
 )
 
 func qidian(dest *url.URL) {
