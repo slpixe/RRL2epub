@@ -136,9 +136,10 @@ func qidian(dest *url.URL) {
 				// grouping text into paragraphs, instead of just replacing linebreaks?
 				switch ChInfo.Data.ChapterInfo.IsRichFormat {
 				case 1:
-					content = ChInfo.Data.ChapterInfo.Content
+					re := strings.NewReplacer("&", " and ", "　", " ", "\u3000", " ", "<br>", "<br/>")
+					content = re.Replace(ChInfo.Data.ChapterInfo.Content)
 				case 0:
-					re := strings.NewReplacer("\n\r", "<br/>", "\n", "<br/>")
+					re := strings.NewReplacer("\n\r", "<br/>", "\n", "<br/>", "&", " and ", "<br>", "<br/>", "\u3000", " ")
 					content = re.Replace(ChInfo.Data.ChapterInfo.Content)
 				}
 				outs := map[string]string{"Title": fmt.Sprintf("%d%s%s", chitem.Index, ": ", chitem.Name), "Body": content}
